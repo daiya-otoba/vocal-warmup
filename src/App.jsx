@@ -157,6 +157,11 @@ const T = {
     playError:     (m) => `再生エラー: ${m}`,
     scaleName: (s) => s.name,
     scaleDesc: (s, mode) => mode === "major" ? s.majorDesc : s.minorDesc,
+    presetsLabel: "My Routine  ·  マイ・ルーティン",
+    savePreset:   "＋ 現在の設定を保存",
+    presetNamePrompt: "プリセット名（例：朝の声出し）",
+    confirmDelete: (n) => `「${n}」を削除しますか？`,
+    nowPlaying:   "再生中",
   },
   en: {
     modeLabel:  "Mode",
@@ -178,6 +183,11 @@ const T = {
     playError:     (m) => `Playback error: ${m}`,
     scaleName: (s) => s.nameEn,
     scaleDesc: (s, mode) => mode === "major" ? s.majorDescEn : s.minorDescEn,
+    presetsLabel: "My Routine",
+    savePreset:   "＋ Save current setup",
+    presetNamePrompt: "Preset name (e.g. Morning warm-up)",
+    confirmDelete: (n) => `Delete "${n}"?`,
+    nowPlaying:   "Now playing",
   },
 };
 
@@ -232,6 +242,50 @@ export default function VocalApp() {
   const [octave, setOctave] = useState(4);
   const [pianoVolPct, setPianoVolPct] = useState(70);
   const [clickVolPct, setClickVolPct] = useState(40);
+
+  // ── Presets (persisted via localStorage) ────────────────────────────────
+  const [presets, setPresets] = useState(() => {
+    try {
+      const raw = typeof window !== "undefined" && window.localStorage
+        ? window.localStorage.getItem("vocal-warmup-presets")
+        : null;
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+  });
+
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        window.localStorage.setItem("vocal-warmup-presets", JSON.stringify(presets));
+      }
+    } catch (e) {}
+  }, [presets]);
+
+  const savePreset = () => {
+    const name = window.prompt(t.presetNamePrompt);
+    if (!name || !name.trim()) return;
+    setPresets((prev) => [
+      ...prev,
+      { id: Date.now(), name: name.trim(), mode, scaleIdx, direction, bpm, startNote, octave },
+    ]);
+  };
+
+  const loadPreset = (p) => {
+    if (isPlaying) return;
+    setMode(p.mode);
+    setScaleIdx(p.scaleIdx);
+    setDirection(p.direction);
+    setBpm(p.bpm);
+    setStartNote(p.startNote);
+    setOctave(p.octave);
+  };
+
+  const deletePreset = (p, e) => {
+    e.stopPropagation();
+    if (window.confirm(t.confirmDelete(p.name))) {
+      setPresets((prev) => prev.filter((x) => x.id !== p.id));
+    }
+  };
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -599,6 +653,61 @@ export default function VocalApp() {
 
         <div style={{ height: "1px", background: "linear-gradient(90deg, transparent, #2a3344, transparent)", marginBottom: "26px" }} />
 
+        {/* ── My Routine (Presets) ── */}
+        <Section label={t.presetsLabel}>
+          {presets.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
+              {presets.map((p) => (
+                <div
+                  key={p.id}
+                  onClick={() => loadPreset(p)}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: "6px",
+                    padding: "9px 12px 9px 14px",
+                    borderRadius: "20px",
+                    border: "1.5px solid #2a3040",
+                    background: "rgba(255,255,255,0.035)",
+                    cursor: isPlaying ? "default" : "pointer",
+                    opacity: isPlaying ? 0.45 : 1,
+                    transition: "all 0.18s",
+                    fontFamily: "'Zen Kaku Gothic New', sans-serif",
+                  }}
+                >
+                  <span style={{ fontSize: "13px", color: "#b0bcd0", fontWeight: 600 }}>
+                    {p.name}
+                  </span>
+                  <button
+                    onClick={(e) => deletePreset(p, e)}
+                    style={{
+                      background: "none", border: "none", color: "#5a6478",
+                      cursor: "pointer", padding: "0 0 0 4px",
+                      fontSize: "14px", lineHeight: 1, display: "flex",
+                    }}
+                  >×</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <button
+            onClick={savePreset}
+            disabled={isPlaying}
+            style={{
+              width: "100%", padding: "12px",
+              borderRadius: "12px",
+              border: "1.5px dashed #2a3040",
+              background: "rgba(255,255,255,0.02)",
+              color: "#7a8598",
+              fontSize: "13px", fontWeight: 600,
+              cursor: isPlaying ? "default" : "pointer",
+              opacity: isPlaying ? 0.4 : 1,
+              transition: "all 0.18s",
+              fontFamily: "'Zen Kaku Gothic New', sans-serif",
+            }}
+          >
+            {t.savePreset}
+          </button>
+        </Section>
+
         {/* ── Mode ── */}
         <Section label={t.modeLabel}>
           <div style={{ display: "flex", gap: "8px" }}>
@@ -669,7 +778,41 @@ export default function VocalApp() {
 
         {/* ── Tempo ── */}
         <Section label={t.tempoLabel(bpm)}>
-          <input type="range" min="40" max="200" value={bpm} onChange={(e) => !isPlaying && setBpm(+e.target.value)} disabled={isPlaying} style={{ opacity: isPlaying ? 0.4 : 1 }} />
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <button
+              onClick={() => !isPlaying && setBpm((b) => Math.max(40, b - 1))}
+              disabled={isPlaying || bpm <= 40}
+              style={{
+                width: "38px", height: "38px", borderRadius: "50%",
+                border: "1.5px solid #2a3040",
+                background: "rgba(255,255,255,0.04)",
+                color: "#b0bcd0", fontSize: "20px", fontWeight: 700,
+                cursor: isPlaying ? "default" : "pointer",
+                opacity: isPlaying ? 0.35 : 1,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                lineHeight: 1, paddingBottom: "3px",
+                fontFamily: "'Cormorant Garamond', serif",
+                flexShrink: 0,
+              }}
+            >−</button>
+            <input type="range" min="40" max="200" value={bpm} onChange={(e) => !isPlaying && setBpm(+e.target.value)} disabled={isPlaying} style={{ opacity: isPlaying ? 0.4 : 1, flex: 1 }} />
+            <button
+              onClick={() => !isPlaying && setBpm((b) => Math.min(200, b + 1))}
+              disabled={isPlaying || bpm >= 200}
+              style={{
+                width: "38px", height: "38px", borderRadius: "50%",
+                border: "1.5px solid #2a3040",
+                background: "rgba(255,255,255,0.04)",
+                color: "#b0bcd0", fontSize: "20px", fontWeight: 700,
+                cursor: isPlaying ? "default" : "pointer",
+                opacity: isPlaying ? 0.35 : 1,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                lineHeight: 1, paddingBottom: "3px",
+                fontFamily: "'Cormorant Garamond', serif",
+                flexShrink: 0,
+              }}
+            >+</button>
+          </div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "#5a6478", marginTop: "10px", fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontWeight: 500, letterSpacing: "0.05em" }}>
             <span>40 · lento</span><span>120</span><span>presto · 200</span>
           </div>
@@ -724,6 +867,51 @@ export default function VocalApp() {
 
         {/* ── Play button ── */}
         <div style={{ paddingTop: "28px", textAlign: "center" }}>
+
+          {/* Compact "now playing" indicator — visible during playback */}
+          {isPlaying && curNote && (
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: "14px",
+              padding: "10px 18px",
+              borderRadius: "30px",
+              border: "1px solid rgba(232,184,109,0.3)",
+              background: "rgba(232,184,109,0.06)",
+              marginBottom: "22px",
+              animation: "pop 0.2s cubic-bezier(0.34,1.56,0.64,1)",
+            }}>
+              <div style={{
+                width: "10px", height: "10px", borderRadius: "50%",
+                background: "#f0c884",
+                boxShadow: "0 0 10px rgba(232,184,109,0.7)",
+                animation: "glow 1.4s ease-in-out infinite",
+              }} />
+              <span style={{
+                fontSize: "11px", color: "#7a8598",
+                letterSpacing: "0.2em",
+                fontFamily: "'Cormorant Garamond', serif",
+                fontStyle: "italic", fontWeight: 600,
+                textTransform: "uppercase",
+              }}>
+                {t.nowPlaying}
+              </span>
+              <span style={{
+                fontSize: "18px", fontWeight: 900, color: "#f0c884",
+                fontFamily: lang === "ja" ? "'Zen Kaku Gothic New', sans-serif" : "'Cormorant Garamond', serif",
+                fontStyle: lang === "en" ? "italic" : "normal",
+                lineHeight: 1,
+              }}>
+                {lang === "ja" ? curNote.jp : curNote.en}
+              </span>
+              <span style={{
+                fontSize: "12px", color: "#7a8598",
+                fontFamily: "'Cormorant Garamond', serif",
+                fontStyle: "italic", fontWeight: 600,
+              }}>
+                {stepNum} / {totalSteps}
+              </span>
+            </div>
+          )}
+
           <div style={{ display: "inline-block", position: "relative" }}>
             {pressed && (
               <div style={{ position: "absolute", inset: "0", borderRadius: "50%", border: `2px solid ${isPlaying ? "rgba(255,150,140,0.6)" : "rgba(240,200,132,0.6)"}`, animation: "ringRipple 0.5s ease-out forwards", pointerEvents: "none" }} />
