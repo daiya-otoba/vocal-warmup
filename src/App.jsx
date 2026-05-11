@@ -301,9 +301,11 @@ export default function VocalApp() {
     }).connect(reverb);
     samplerRef.current = sampler;
 
-    // Wait for both the reverb IR and all audio samples
+    // Wait for reverb IR and all audio samples, then let the audio
+    // context fully stabilize before the first note is scheduled.
     await reverb.generate();
     await Tone.loaded();
+    await new Promise((r) => setTimeout(r, 200));
 
     // Metronome click stays as a lightweight sine burst
     const click = new Tone.Synth({
@@ -420,7 +422,7 @@ export default function VocalApp() {
           tickClick();
           await sleep(beatMs);
           if (!playingRef.current) break;
-          releaseAll();
+          // ← releaseAll() removed: notes already ended via their duration param
         } else {
           tickClick();
           await sleep(beatMs);
