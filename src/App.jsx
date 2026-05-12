@@ -610,6 +610,7 @@ export default function VocalApp() {
         @keyframes noteGlow      { 0% { box-shadow:0 0 0 rgba(255,217,122,0); transform:scale(1); } 40% { box-shadow:0 0 22px rgba(255,217,122,0.7); transform:scale(1.05); } 100% { box-shadow:0 0 14px rgba(255,217,122,0.45); transform:scale(1); } }
         @keyframes idleBreath { 0%,100% { box-shadow:inset 0 1px 2px rgba(255,255,255,0.4),inset 0 -3px 8px rgba(0,0,0,0.25),0 12px 38px rgba(232,184,109,0.4),0 0 0 0 rgba(232,184,109,0.3); } 50% { box-shadow:inset 0 1px 2px rgba(255,255,255,0.4),inset 0 -3px 8px rgba(0,0,0,0.25),0 12px 42px rgba(232,184,109,0.5),0 0 0 8px rgba(232,184,109,0.05); } }
         @keyframes spin       { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+        @keyframes tanukiSway { 0% { transform:translateX(-50%) rotate(0deg); } 25% { transform:translateX(-50%) rotate(-5deg); } 75% { transform:translateX(-50%) rotate(5deg); } 100% { transform:translateX(-50%) rotate(0deg); } }
         input[type=range] { -webkit-appearance:none; appearance:none; height:6px; border-radius:3px; background:#1f2334; outline:none; width:100%; }
         input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:24px; height:24px; border-radius:50%; background:linear-gradient(145deg,#f0c884,#c9943a); cursor:pointer; box-shadow:0 2px 10px rgba(232,184,109,0.5),inset 0 1px 1px rgba(255,255,255,0.3); }
         input[type=range]::-moz-range-thumb { width:24px; height:24px; border:none; border-radius:50%; background:linear-gradient(145deg,#f0c884,#c9943a); cursor:pointer; }
@@ -989,20 +990,12 @@ export default function VocalApp() {
         {/* ── Tanuki Staircase ── */}
         {(() => {
           const NUM_STEPS = 13;
-          const STAIR_PCT = 62; // bottom 62% is stairs, top 38% reserved for tanuki sprite
+          const STAIR_PCT = 62;
           const stepW = 100 / NUM_STEPS;
           const stepH = STAIR_PCT / NUM_STEPS;
 
-          // Build the staircase outline path in viewBox 0 0 100 100
-          const parts = [`M 0 100`, `L 0 ${100 - stepH}`];
-          for (let i = 0; i < NUM_STEPS; i++) {
-            const xR = (i + 1) * stepW;
-            const yT = 100 - (i + 1) * stepH;
-            parts.push(`L ${xR} ${yT}`);
-            if (i < NUM_STEPS - 1) parts.push(`L ${xR} ${100 - (i + 2) * stepH}`);
-          }
-          parts.push(`L 100 100 Z`);
-          const stairPath = parts.join(" ");
+          // Which chromatic positions are sharp (black key)
+          const SHARPS = new Set([1, 3, 6, 8, 10]);
 
           const tanukiBottomPct = (tanukiOffset + 1) * stepH;
           const tanukiLeftPct = (tanukiOffset + 0.5) * stepW;
@@ -1023,27 +1016,70 @@ export default function VocalApp() {
                 style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible" }}
               >
                 <defs>
-                  <linearGradient id="stairGrad" x1="0" y1="100%" x2="0" y2="0%">
-                    <stop offset="0%"  stopColor="rgba(232,184,109,0.04)" />
-                    <stop offset="100%" stopColor="rgba(232,184,109,0.14)" />
+                  <linearGradient id="whiteKeyGrad" x1="0" y1="0%" x2="0" y2="100%">
+                    <stop offset="0%"  stopColor="rgba(245,228,180,0.22)" />
+                    <stop offset="100%" stopColor="rgba(210,175,100,0.10)" />
+                  </linearGradient>
+                  <linearGradient id="blackKeyGrad" x1="0" y1="0%" x2="0" y2="100%">
+                    <stop offset="0%"  stopColor="rgba(30,25,15,0.85)" />
+                    <stop offset="100%" stopColor="rgba(15,12,5,0.95)" />
+                  </linearGradient>
+                  <linearGradient id="activeKeyGrad" x1="0" y1="0%" x2="0" y2="100%">
+                    <stop offset="0%"  stopColor="rgba(255,230,140,0.85)" />
+                    <stop offset="100%" stopColor="rgba(220,165,60,0.70)" />
                   </linearGradient>
                 </defs>
-                <path
-                  d={stairPath}
-                  fill="url(#stairGrad)"
-                  stroke="rgba(232,184,109,0.4)"
-                  strokeWidth="1"
-                  strokeLinejoin="miter"
-                  vectorEffect="non-scaling-stroke"
-                />
-                {/* Subtle highlight under the active step */}
+
+                {Array.from({ length: NUM_STEPS }, (_, i) => {
+                  const noteIdx = (startNote + i) % 12;
+                  const isSharp = SHARPS.has(noteIdx);
+                  const isActive = isPlaying && i === tanukiOffset;
+                  const xL = i * stepW;
+                  const yT = 100 - (i + 1) * stepH;
+                  const yB = 100;
+                  // Each step: left edge to right edge, top to bottom (staircase shape)
+                  // Step i occupies: x[xL..xL+stepW], y[yT..100]
+                  const fill = isActive
+                    ? "url(#activeKeyGrad)"
+                    : isSharp
+                      ? "url(#blackKeyGrad)"
+                      : "url(#whiteKeyGrad)";
+                  const stroke = isActive
+                    ? "rgba(255,220,100,0.9)"
+                    : isSharp
+                      ? "rgba(80,65,30,0.5)"
+                      : "rgba(200,160,80,0.35)";
+                  // Draw each step as a polygon (staircase slice)
+                  const pts = [
+                    `${xL},${yB}`,
+                    `${xL},${yT}`,
+                    `${xL + stepW},${yT}`,
+                    `${xL + stepW},${yB}`,
+                  ].join(" ");
+                  return (
+                    <polygon
+                      key={i}
+                      points={pts}
+                      fill={fill}
+                      stroke={stroke}
+                      strokeWidth="0.5"
+                      vectorEffect="non-scaling-stroke"
+                      style={{
+                        transition: "fill 0.18s, stroke 0.18s",
+                        filter: isSharp && !isActive ? "brightness(0.7)" : "none",
+                      }}
+                    />
+                  );
+                })}
+
+                {/* Glow shadow under active step */}
                 {isPlaying && (
                   <ellipse
                     cx={tanukiLeftPct}
                     cy={100 - tanukiOffset * stepH}
                     rx={stepW * 0.45}
-                    ry={stepH * 0.18}
-                    fill="rgba(232,184,109,0.5)"
+                    ry={stepH * 0.22}
+                    fill="rgba(255,217,100,0.45)"
                     style={{ filter: "blur(2px)", transition: "cx 0.26s cubic-bezier(0.33,1,0.68,1), cy 0.26s cubic-bezier(0.33,1,0.68,1)" }}
                   />
                 )}
@@ -1051,6 +1087,7 @@ export default function VocalApp() {
               <img
                 src={tanukiSrc}
                 alt="マスコットキャラ"
+                key={tanukiPhase === "idle" ? tickPulse : `pose-${tanukiPhase}`}
                 style={{
                   position: "absolute",
                   left: `${tanukiLeftPct}%`,
@@ -1065,6 +1102,10 @@ export default function VocalApp() {
                   userSelect: "none",
                   WebkitUserSelect: "none",
                   WebkitUserDrag: "none",
+                  animation: tanukiPhase === "idle" && isPlaying
+                    ? `tanukiSway ${60 / bpm * 0.9}s ease-in-out forwards`
+                    : "none",
+                  transformOrigin: "50% 100%",
                 }}
                 draggable={false}
               />
