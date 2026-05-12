@@ -296,6 +296,52 @@ export default function VocalApp() {
   const [errorMsg, setErrorMsg] = useState("");
   const [audioReady, setAudioReady] = useState(false);
   const [pressed, setPressed] = useState(false);
+  const [tickPulse, setTickPulse] = useState(0); // increments on each metronome click
+
+  // ── Tanuki animation state ──────────────────────────────────────────────
+  // Phases: idle (標準) → prep (ジャンプ準備) → jump (ジャンプ) → land (着地) → idle
+  const TANUKI_POSES = { idle: "標準", prep: "ジャンプ準備", jump: "ジャンプ", land: "着地" };
+  const [tanukiOffset, setTanukiOffset] = useState(0);
+  const [tanukiPhase, setTanukiPhase] = useState("idle");
+  const [tanukiFacing, setTanukiFacing] = useState("right");
+  const prevTanukiOffsetRef = useRef(0);
+  const tanukiTimersRef = useRef([]);
+
+  // Preload all 8 sprites once on mount so animation is instant
+  useEffect(() => {
+    Object.values(TANUKI_POSES).forEach((pose) => {
+      ["", "_逆"].forEach((suffix) => {
+        const img = new Image();
+        img.src = `/tanuki_${pose}${suffix}.png`;
+      });
+    });
+  }, []);
+
+  // Trigger jump animation cycle whenever currentOffset changes
+  useEffect(() => {
+    // clear any in-flight animation timers
+    tanukiTimersRef.current.forEach((id) => clearTimeout(id));
+    tanukiTimersRef.current = [];
+
+    if (currentOffset === null) {
+      setTanukiPhase("idle");
+      return;
+    }
+    const prev = prevTanukiOffsetRef.current;
+    if (currentOffset !== prev) {
+      setTanukiFacing(currentOffset > prev ? "right" : "left");
+    }
+    setTanukiPhase("prep");
+    const t1 = setTimeout(() => {
+      setTanukiPhase("jump");
+      setTanukiOffset(currentOffset);
+      prevTanukiOffsetRef.current = currentOffset;
+    }, 110);
+    const t2 = setTimeout(() => setTanukiPhase("land"), 380);
+    const t3 = setTimeout(() => setTanukiPhase("idle"), 520);
+    tanukiTimersRef.current = [t1, t2, t3];
+    return () => tanukiTimersRef.current.forEach((id) => clearTimeout(id));
+  }, [currentOffset]);
 
   // ── Refs ──────────────────────────────────────────────────────────────────
   // Single Sampler replaces the 3 chord voices + melody synth
@@ -388,6 +434,7 @@ export default function VocalApp() {
   const tickClick = () => {
     if (!clickRef.current || clickVolPctRef.current <= 0) return;
     try { clickRef.current.triggerAttackRelease("C6", 0.018); } catch (e) {}
+    setTickPulse((p) => p + 1);
   };
 
   const handlePress = async () => {
@@ -542,7 +589,15 @@ export default function VocalApp() {
   const progress = totalSteps > 0 ? (stepNum / totalSteps) * 100 : 0;
 
   return (
-    <>
+    <div style={{
+        fontFamily: "'Zen Kaku Gothic New', sans-serif",
+        minHeight: "100vh",
+        background: "radial-gradient(ellipse at top, rgba(232,184,109,0.05) 0%, transparent 55%), linear-gradient(170deg, #050710 0%, #0a0e1c 50%, #050710 100%)",
+        color: "#e6e2d6",
+        maxWidth: "480px",
+        margin: "0 auto",
+        padding: "0 18px 56px",
+      }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,700&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -551,6 +606,8 @@ export default function VocalApp() {
         @keyframes glow       { 0%,100% { box-shadow:0 0 22px rgba(232,184,109,0.35),0 0 50px rgba(232,184,109,0.15); } 50% { box-shadow:0 0 36px rgba(232,184,109,0.6),0 0 70px rgba(232,184,109,0.32); } }
         @keyframes ghostPulse { 0%,100% { opacity:0.5; transform:scale(1); } 50% { opacity:0.8; transform:scale(1.04); } }
         @keyframes ringRipple { 0% { transform:scale(1); opacity:0.6; } 100% { transform:scale(1.7); opacity:0; } }
+        @keyframes tickPulseAnim { 0% { transform:scale(1); opacity:0.7; } 100% { transform:scale(1.22); opacity:0; } }
+        @keyframes noteGlow      { 0% { box-shadow:0 0 0 rgba(255,217,122,0); transform:scale(1); } 40% { box-shadow:0 0 22px rgba(255,217,122,0.7); transform:scale(1.05); } 100% { box-shadow:0 0 14px rgba(255,217,122,0.45); transform:scale(1); } }
         @keyframes idleBreath { 0%,100% { box-shadow:inset 0 1px 2px rgba(255,255,255,0.4),inset 0 -3px 8px rgba(0,0,0,0.25),0 12px 38px rgba(232,184,109,0.4),0 0 0 0 rgba(232,184,109,0.3); } 50% { box-shadow:inset 0 1px 2px rgba(255,255,255,0.4),inset 0 -3px 8px rgba(0,0,0,0.25),0 12px 42px rgba(232,184,109,0.5),0 0 0 8px rgba(232,184,109,0.05); } }
         @keyframes spin       { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
         input[type=range] { -webkit-appearance:none; appearance:none; height:6px; border-radius:3px; background:#1f2334; outline:none; width:100%; }
@@ -560,16 +617,6 @@ export default function VocalApp() {
         button { -webkit-tap-highlight-color:transparent; }
         .lang-btn:hover { border-color:#4a5570 !important; color:#b0bcd0 !important; }
       `}</style>
-
-      <div style={{
-        fontFamily: "'Zen Kaku Gothic New', sans-serif",
-        minHeight: "100vh",
-        background: "radial-gradient(ellipse at top, rgba(232,184,109,0.05) 0%, transparent 55%), linear-gradient(170deg, #050710 0%, #0a0e1c 50%, #050710 100%)",
-        color: "#e6e2d6",
-        maxWidth: "480px",
-        margin: "0 auto",
-        padding: "0 18px 56px",
-      }}>
 
         {/* ── Header ── */}
         <div style={{ textAlign: "center", padding: "32px 0 22px", position: "relative" }}>
@@ -725,39 +772,76 @@ export default function VocalApp() {
 
         {/* ── Scale ── */}
         <Section label={t.scaleLabel}>
-          <div style={{ marginBottom: "10px" }}>
-            <div style={{ fontSize: "10px", color: "#5a6478", letterSpacing: "0.2em", marginBottom: "8px", fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic" }}>
-              {t.groupEach}
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
-              {SCALES.filter(s => s.group === "each").map((s) => {
-                const i = SCALES.indexOf(s);
-                return (
-                  <button key={i} onClick={() => !isPlaying && setScaleIdx(i)} style={{ padding: "13px 16px", textAlign: "left", borderRadius: "12px", border: `1.5px solid ${scaleIdx === i ? "#f0c884" : "#2a3040"}`, background: scaleIdx === i ? "rgba(232,184,109,0.1)" : "rgba(255,255,255,0.025)", cursor: isPlaying ? "default" : "pointer", opacity: isPlaying ? 0.45 : 1, transition: "all 0.18s", fontFamily: "'Zen Kaku Gothic New', sans-serif" }}>
-                    <div style={{ fontSize: "14px", fontWeight: "700", color: scaleIdx === i ? "#f0c884" : "#b0bcd0" }}>{t.scaleName(s)}</div>
-                    <div style={{ fontSize: "11px", color: scaleIdx === i ? "#9aa6c0" : "#6a7590", marginTop: "4px", fontWeight: 500 }}>{t.scaleDesc(s, mode)}</div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div>
-            <div style={{ fontSize: "10px", color: "#5a6478", letterSpacing: "0.2em", marginBottom: "8px", fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic" }}>
-              {t.groupFirst}
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
-              {SCALES.filter(s => s.group === "first").map((s) => {
-                const i = SCALES.indexOf(s);
-                return (
-                  <button key={i} onClick={() => !isPlaying && setScaleIdx(i)} style={{ padding: "13px 16px", textAlign: "left", borderRadius: "12px", border: `1.5px solid ${scaleIdx === i ? "#7eafff" : "#2a3040"}`, background: scaleIdx === i ? "rgba(126,175,255,0.1)" : "rgba(255,255,255,0.025)", cursor: isPlaying ? "default" : "pointer", opacity: isPlaying ? 0.45 : 1, transition: "all 0.18s", fontFamily: "'Zen Kaku Gothic New', sans-serif" }}>
-                    <div style={{ fontSize: "14px", fontWeight: "700", color: scaleIdx === i ? "#7eafff" : "#b0bcd0" }}>{t.scaleName(s)}</div>
-                    <div style={{ fontSize: "11px", color: scaleIdx === i ? "#8aa8e0" : "#6a7590", marginTop: "4px", fontWeight: 500 }}>{t.scaleDesc(s, mode)}</div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          {(() => {
+            const sel = SCALES[scaleIdx];
+            const accent = sel.group === "first" ? "#7eafff" : "#f0c884";
+            return (
+              <>
+                <div style={{ position: "relative" }}>
+                  <select
+                    value={scaleIdx}
+                    onChange={(e) => !isPlaying && setScaleIdx(+e.target.value)}
+                    disabled={isPlaying}
+                    style={{
+                      width: "100%",
+                      padding: "13px 40px 13px 16px",
+                      borderRadius: "12px",
+                      border: `1.5px solid ${accent}`,
+                      background: sel.group === "first" ? "rgba(126,175,255,0.1)" : "rgba(232,184,109,0.1)",
+                      color: accent,
+                      fontSize: "14px",
+                      fontWeight: 700,
+                      fontFamily: "'Zen Kaku Gothic New', sans-serif",
+                      cursor: isPlaying ? "default" : "pointer",
+                      opacity: isPlaying ? 0.45 : 1,
+                      appearance: "none",
+                      WebkitAppearance: "none",
+                      MozAppearance: "none",
+                      outline: "none",
+                    }}
+                  >
+                    <optgroup label={t.groupEach} style={{ background: "#0a0e1c", color: "#b0bcd0" }}>
+                      {SCALES.filter((s) => s.group === "each").map((s) => {
+                        const i = SCALES.indexOf(s);
+                        return <option key={i} value={i} style={{ background: "#0a0e1c", color: "#e6e2d6" }}>{t.scaleName(s)}</option>;
+                      })}
+                    </optgroup>
+                    <optgroup label={t.groupFirst} style={{ background: "#0a0e1c", color: "#b0bcd0" }}>
+                      {SCALES.filter((s) => s.group === "first").map((s) => {
+                        const i = SCALES.indexOf(s);
+                        return <option key={i} value={i} style={{ background: "#0a0e1c", color: "#e6e2d6" }}>{t.scaleName(s)}</option>;
+                      })}
+                    </optgroup>
+                  </select>
+                  <span style={{
+                    position: "absolute",
+                    right: "16px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: accent,
+                    fontSize: "10px",
+                    pointerEvents: "none",
+                    opacity: isPlaying ? 0.45 : 1,
+                  }}>▼</span>
+                </div>
+                <div style={{
+                  marginTop: "10px",
+                  padding: "11px 14px",
+                  fontSize: "12px",
+                  color: "#9aa6c0",
+                  fontWeight: 500,
+                  lineHeight: 1.55,
+                  fontFamily: "'Zen Kaku Gothic New', sans-serif",
+                  borderLeft: `2px solid ${accent}`,
+                  background: "rgba(255,255,255,0.02)",
+                  borderRadius: "4px",
+                  opacity: isPlaying ? 0.6 : 1,
+                }}>
+                  {t.scaleDesc(sel, mode)}
+                </div>
+              </>
+            );
+          })()}
         </Section>
 
         {/* ── Direction ── */}
@@ -843,14 +927,51 @@ export default function VocalApp() {
         {/* ── Start Note ── */}
         <Section label={t.noteLabel}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "7px", marginBottom: "16px" }}>
-            {NOTES.map((n) => (
-              <button key={n.idx} onClick={() => !isPlaying && setStartNote(n.idx)} style={{ padding: "10px 3px", borderRadius: "10px", border: `1.5px solid ${startNote === n.idx ? "#f0c884" : n.sharp ? "#1a1f2e" : "#2a3040"}`, background: startNote === n.idx ? "rgba(232,184,109,0.2)" : n.sharp ? "rgba(255,255,255,0.015)" : "rgba(255,255,255,0.035)", color: startNote === n.idx ? "#f0c884" : n.sharp ? "#6a7590" : "#b0bcd0", fontSize: "13px", fontWeight: startNote === n.idx ? "700" : "500", textAlign: "center", cursor: isPlaying ? "default" : "pointer", opacity: isPlaying ? 0.45 : 1, transition: "all 0.15s", fontFamily: "'Zen Kaku Gothic New', sans-serif" }}>
-                <div>{lang === "ja" ? n.jp : n.en}</div>
-                <div style={{ fontSize: "10px", opacity: 0.7, marginTop: "2px", fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontWeight: 600 }}>
-                  {lang === "ja" ? n.en : n.jp}
-                </div>
-              </button>
-            ))}
+            {NOTES.map((n) => {
+              const isStart = startNote === n.idx;
+              const isPlayingNow = isPlaying && currentOffset !== null
+                && ((startNote + currentOffset) % 12) === n.idx;
+              return (
+                <button
+                  key={n.idx}
+                  onClick={() => !isPlaying && setStartNote(n.idx)}
+                  style={{
+                    padding: lang === "ja" ? "10px 3px" : "14px 3px",
+                    borderRadius: "10px",
+                    border: `1.5px solid ${
+                      isPlayingNow ? "#ffd97a"
+                      : isStart   ? "#f0c884"
+                      : n.sharp   ? "#1a1f2e"
+                      : "#2a3040"
+                    }`,
+                    background: isPlayingNow
+                      ? "rgba(255,217,122,0.28)"
+                      : isStart ? "rgba(232,184,109,0.2)"
+                      : n.sharp ? "rgba(255,255,255,0.015)"
+                      : "rgba(255,255,255,0.035)",
+                    color: isPlayingNow ? "#ffe9b0"
+                      : isStart ? "#f0c884"
+                      : n.sharp ? "#6a7590"
+                      : "#b0bcd0",
+                    fontSize: "13px",
+                    fontWeight: isStart || isPlayingNow ? "700" : "500",
+                    textAlign: "center",
+                    cursor: isPlaying ? "default" : "pointer",
+                    opacity: isPlaying ? (isPlayingNow ? 1 : 0.45) : 1,
+                    transition: "all 0.15s",
+                    fontFamily: "'Zen Kaku Gothic New', sans-serif",
+                    animation: isPlayingNow ? "noteGlow 0.5s ease-out forwards" : "none",
+                  }}
+                >
+                  <div>{lang === "ja" ? n.jp : n.en}</div>
+                  {lang === "ja" && (
+                    <div style={{ fontSize: "10px", opacity: 0.7, marginTop: "2px", fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontWeight: 600 }}>
+                      {n.en}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <span style={{ fontSize: "11px", color: "#7a8598", letterSpacing: "0.2em", fontFamily: "'Cormorant Garamond', serif", fontStyle: "italic", fontWeight: 600, textTransform: "uppercase" }}>octave</span>
@@ -865,56 +986,111 @@ export default function VocalApp() {
           </div>
         </Section>
 
-        {/* ── Play button ── */}
-        <div style={{ paddingTop: "28px", textAlign: "center" }}>
+        {/* ── Tanuki Staircase ── */}
+        {(() => {
+          const NUM_STEPS = 13;
+          const STAIR_PCT = 62; // bottom 62% is stairs, top 38% reserved for tanuki sprite
+          const stepW = 100 / NUM_STEPS;
+          const stepH = STAIR_PCT / NUM_STEPS;
 
-          {/* Compact "now playing" indicator — visible during playback */}
-          {isPlaying && curNote && (
+          // Build the staircase outline path in viewBox 0 0 100 100
+          const parts = [`M 0 100`, `L 0 ${100 - stepH}`];
+          for (let i = 0; i < NUM_STEPS; i++) {
+            const xR = (i + 1) * stepW;
+            const yT = 100 - (i + 1) * stepH;
+            parts.push(`L ${xR} ${yT}`);
+            if (i < NUM_STEPS - 1) parts.push(`L ${xR} ${100 - (i + 2) * stepH}`);
+          }
+          parts.push(`L 100 100 Z`);
+          const stairPath = parts.join(" ");
+
+          const tanukiBottomPct = (tanukiOffset + 1) * stepH;
+          const tanukiLeftPct = (tanukiOffset + 0.5) * stepW;
+          const tanukiSrc = `/tanuki_${TANUKI_POSES[tanukiPhase]}${tanukiFacing === "left" ? "_逆" : ""}.png`;
+
+          return (
             <div style={{
-              display: "inline-flex", alignItems: "center", gap: "14px",
-              padding: "10px 18px",
-              borderRadius: "30px",
-              border: "1px solid rgba(232,184,109,0.3)",
-              background: "rgba(232,184,109,0.06)",
-              marginBottom: "22px",
-              animation: "pop 0.2s cubic-bezier(0.34,1.56,0.64,1)",
+              position: "relative",
+              width: "100%",
+              height: "190px",
+              marginTop: "8px",
+              marginBottom: "20px",
+              overflow: "visible",
             }}>
-              <div style={{
-                width: "10px", height: "10px", borderRadius: "50%",
-                background: "#f0c884",
-                boxShadow: "0 0 10px rgba(232,184,109,0.7)",
-                animation: "glow 1.4s ease-in-out infinite",
-              }} />
-              <span style={{
-                fontSize: "11px", color: "#7a8598",
-                letterSpacing: "0.2em",
-                fontFamily: "'Cormorant Garamond', serif",
-                fontStyle: "italic", fontWeight: 600,
-                textTransform: "uppercase",
-              }}>
-                {t.nowPlaying}
-              </span>
-              <span style={{
-                fontSize: "18px", fontWeight: 900, color: "#f0c884",
-                fontFamily: lang === "ja" ? "'Zen Kaku Gothic New', sans-serif" : "'Cormorant Garamond', serif",
-                fontStyle: lang === "en" ? "italic" : "normal",
-                lineHeight: 1,
-              }}>
-                {lang === "ja" ? curNote.jp : curNote.en}
-              </span>
-              <span style={{
-                fontSize: "12px", color: "#7a8598",
-                fontFamily: "'Cormorant Garamond', serif",
-                fontStyle: "italic", fontWeight: 600,
-              }}>
-                {stepNum} / {totalSteps}
-              </span>
+              <svg
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible" }}
+              >
+                <defs>
+                  <linearGradient id="stairGrad" x1="0" y1="100%" x2="0" y2="0%">
+                    <stop offset="0%"  stopColor="rgba(232,184,109,0.04)" />
+                    <stop offset="100%" stopColor="rgba(232,184,109,0.14)" />
+                  </linearGradient>
+                </defs>
+                <path
+                  d={stairPath}
+                  fill="url(#stairGrad)"
+                  stroke="rgba(232,184,109,0.4)"
+                  strokeWidth="1"
+                  strokeLinejoin="miter"
+                  vectorEffect="non-scaling-stroke"
+                />
+                {/* Subtle highlight under the active step */}
+                {isPlaying && (
+                  <ellipse
+                    cx={tanukiLeftPct}
+                    cy={100 - tanukiOffset * stepH}
+                    rx={stepW * 0.45}
+                    ry={stepH * 0.18}
+                    fill="rgba(232,184,109,0.5)"
+                    style={{ filter: "blur(2px)", transition: "cx 0.26s cubic-bezier(0.33,1,0.68,1), cy 0.26s cubic-bezier(0.33,1,0.68,1)" }}
+                  />
+                )}
+              </svg>
+              <img
+                src={tanukiSrc}
+                alt="マスコットキャラ"
+                style={{
+                  position: "absolute",
+                  left: `${tanukiLeftPct}%`,
+                  bottom: `${tanukiBottomPct}%`,
+                  transform: "translateX(-50%)",
+                  width: "62px",
+                  height: "auto",
+                  transition: "left 0.26s cubic-bezier(0.33,1,0.68,1), bottom 0.26s cubic-bezier(0.33,1,0.68,1)",
+                  pointerEvents: "none",
+                  filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.55))",
+                  zIndex: 2,
+                  userSelect: "none",
+                  WebkitUserSelect: "none",
+                  WebkitUserDrag: "none",
+                }}
+                draggable={false}
+              />
             </div>
-          )}
+          );
+        })()}
+
+        {/* ── Play button ── */}
+        <div style={{ paddingTop: "8px", textAlign: "center" }}>
 
           <div style={{ display: "inline-block", position: "relative" }}>
             {pressed && (
               <div style={{ position: "absolute", inset: "0", borderRadius: "50%", border: `2px solid ${isPlaying ? "rgba(255,150,140,0.6)" : "rgba(240,200,132,0.6)"}`, animation: "ringRipple 0.5s ease-out forwards", pointerEvents: "none" }} />
+            )}
+            {isPlaying && (
+              <div
+                key={tickPulse}
+                style={{
+                  position: "absolute", inset: "-2px",
+                  borderRadius: "50%",
+                  border: "2px solid rgba(255,200,180,0.55)",
+                  animation: `tickPulseAnim ${Math.min(0.42, 60 / bpm * 0.7)}s ease-out forwards`,
+                  pointerEvents: "none",
+                  zIndex: 0,
+                }}
+              />
             )}
             <button className="play-btn" onClick={handlePress} style={{ position: "relative", width: "132px", height: "132px", borderRadius: "50%", border: `1px solid ${isPlaying ? "rgba(255,180,170,0.4)" : "rgba(255,220,160,0.35)"}`, background: isPlaying ? "radial-gradient(ellipse at 30% 25%, rgba(255,200,180,0.45) 0%, transparent 55%), linear-gradient(165deg, #e25040 0%, #b03020 50%, #802010 100%)" : "radial-gradient(ellipse at 30% 25%, rgba(255,235,190,0.55) 0%, transparent 55%), linear-gradient(165deg, #f8d090 0%, #d49642 50%, #a07018 100%)", color: "#1c1208", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto", animation: !isPlaying && !pressed ? "idleBreath 2.8s ease-in-out infinite" : "none", boxShadow: pressed ? (isPlaying ? "inset 0 4px 12px rgba(0,0,0,0.5),0 2px 8px rgba(192,57,43,0.3)" : "inset 0 4px 12px rgba(0,0,0,0.4),0 2px 8px rgba(232,184,109,0.25)") : isPlaying ? "inset 0 1px 2px rgba(255,255,255,0.3),inset 0 -3px 8px rgba(0,0,0,0.35),0 10px 38px rgba(192,57,43,0.55),0 0 0 1px rgba(0,0,0,0.5)" : "inset 0 1px 2px rgba(255,255,255,0.45),inset 0 -3px 10px rgba(0,0,0,0.3),0 12px 42px rgba(232,184,109,0.45),0 0 0 1px rgba(0,0,0,0.5)", cursor: isLoading ? "default" : "pointer", opacity: isLoading ? 0.55 : 1, transition: pressed ? "transform 0.1s ease,box-shadow 0.1s ease" : "all 0.3s ease", transform: pressed ? "scale(0.93) translateY(2px)" : "scale(1) translateY(0)" }}>
               {isLoading ? (
@@ -931,7 +1107,6 @@ export default function VocalApp() {
           </div>
         </div>
 
-      </div>
-    </>
+    </div>
   );
 }
