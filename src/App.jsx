@@ -610,7 +610,7 @@ export default function VocalApp() {
         @keyframes noteGlow      { 0% { box-shadow:0 0 0 rgba(255,217,122,0); transform:scale(1); } 40% { box-shadow:0 0 22px rgba(255,217,122,0.7); transform:scale(1.05); } 100% { box-shadow:0 0 14px rgba(255,217,122,0.45); transform:scale(1); } }
         @keyframes idleBreath { 0%,100% { box-shadow:inset 0 1px 2px rgba(255,255,255,0.4),inset 0 -3px 8px rgba(0,0,0,0.25),0 12px 38px rgba(232,184,109,0.4),0 0 0 0 rgba(232,184,109,0.3); } 50% { box-shadow:inset 0 1px 2px rgba(255,255,255,0.4),inset 0 -3px 8px rgba(0,0,0,0.25),0 12px 42px rgba(232,184,109,0.5),0 0 0 8px rgba(232,184,109,0.05); } }
         @keyframes spin       { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
-        @keyframes tanukiSway { 0% { transform:translateX(-50%) rotate(0deg); } 25% { transform:translateX(-50%) rotate(-5deg); } 75% { transform:translateX(-50%) rotate(5deg); } 100% { transform:translateX(-50%) rotate(0deg); } }
+        @keyframes tanukiSway { 0% { transform:rotate(0deg); } 25% { transform:rotate(-2deg); } 50% { transform:rotate(0deg); } 75% { transform:rotate(2deg); } 100% { transform:rotate(0deg); } }
         input[type=range] { -webkit-appearance:none; appearance:none; height:6px; border-radius:3px; background:#1f2334; outline:none; width:100%; }
         input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:24px; height:24px; border-radius:50%; background:linear-gradient(145deg,#f0c884,#c9943a); cursor:pointer; box-shadow:0 2px 10px rgba(232,184,109,0.5),inset 0 1px 1px rgba(255,255,255,0.3); }
         input[type=range]::-moz-range-thumb { width:24px; height:24px; border:none; border-radius:50%; background:linear-gradient(145deg,#f0c884,#c9943a); cursor:pointer; }
@@ -1084,31 +1084,37 @@ export default function VocalApp() {
                   />
                 )}
               </svg>
-              <img
-                src={tanukiSrc}
-                alt="マスコットキャラ"
-                key={tanukiPhase === "idle" ? tickPulse : `pose-${tanukiPhase}`}
+              <div
                 style={{
                   position: "absolute",
                   left: `${tanukiLeftPct}%`,
                   bottom: `${tanukiBottomPct}%`,
                   transform: "translateX(-50%)",
                   width: "62px",
-                  height: "auto",
                   transition: "left 0.26s cubic-bezier(0.33,1,0.68,1), bottom 0.26s cubic-bezier(0.33,1,0.68,1)",
                   pointerEvents: "none",
-                  filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.55))",
                   zIndex: 2,
-                  userSelect: "none",
-                  WebkitUserSelect: "none",
-                  WebkitUserDrag: "none",
-                  animation: tanukiPhase === "idle" && isPlaying
-                    ? `tanukiSway ${60 / bpm * 0.9}s ease-in-out forwards`
-                    : "none",
-                  transformOrigin: "50% 100%",
                 }}
-                draggable={false}
-              />
+              >
+                <img
+                  src={tanukiSrc}
+                  alt="マスコットキャラ"
+                  style={{
+                    width: "100%",
+                    height: "auto",
+                    display: "block",
+                    filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.55))",
+                    userSelect: "none",
+                    WebkitUserSelect: "none",
+                    WebkitUserDrag: "none",
+                    transformOrigin: "50% 100%",
+                    animation: tanukiPhase === "idle" && isPlaying
+                      ? `tanukiSway ${(60 / bpm) * 2}s ease-in-out infinite`
+                      : "none",
+                  }}
+                  draggable={false}
+                />
+              </div>
             </div>
           );
         })()}
